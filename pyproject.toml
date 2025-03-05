@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=62.0", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "seobnrv4ce"
+authors = [
+    {name = "Ritesh Bachhar", email = "riteshbachhar@uri.edu"},
+    {name = "Michael Puerrer", email = "mpuerrer@uri.edu"},
+    {name = "Stephen Green", email = "Stephen.Green2@nottingham.ac.uk"},
+]
+description = "Waveform uncertainty model for SEOBNRv4"
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.8"
+dynamic = ["version"]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent"
+]
+
+dependencies = [
+    "bilby",
+    "h5py",
+    "lalsuite",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "scipy"
+]
+
+[tool.setuptools.packages.find]
+include = ["seobnrv4ce*"]
+namespaces = false
+
+[tool.setuptools_scm]
+write_to = "seobnrv4ce/_version.py"
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow",
+]
+
+[project.urls]
+homepage = "https://github.com/riteshbachhar/SEOBNRv4CE"
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "linkify-it-py",
+    "myst-nb",
+    "myst-parser",
+    "pylint",
+    "pytest",
+]
