@@ -29,6 +29,9 @@ import numpy as np
 import bilby
 import lalsimulation as LS
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import seobnrv4ce
+
 
 
 def setup_waveform_generator_standard(
