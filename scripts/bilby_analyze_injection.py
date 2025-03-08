@@ -1,18 +1,78 @@
 """
-Perform a parameter estimation analysis with bilby on a synthetic signal with support for waveform uncertainty model SEOBNRv4CE and SEOBNRv4CE0.
+Gravitational Wave Parameter Estimation with SEOBNRv4-based waveform uncertainty.
+
+This script performs parameter estimation analysis on a synthetic gravitational wave signal
+using bilby, with support for waveform uncertainty model SEOBNRv4CE and deterministic model SEOBNRv4CE0.
+
+It provides functionality to:
+- Generate gravitational waveforms using standard and uncertainty-aware models.
+- Set up interferometers and inject signals.
+- Define priors for Bayesian inference.
+- Perform parameter estimation using nested sampling.
+- Generate diagnostic plots for posterior distributions.
+
+Dependencies:
+-------------
+- bilby
+- numpy
+- lalsimulation
+
+Usage:
+------
+This script can be executed via the command line with configurable arguments.
+See `parse_args()` for available options.
+
 """
+
+import os, sys, argparse
 import numpy as np
 import bilby
-import sys
-import argparse
 import lalsimulation as LS
 
 
-def setup_waveform_generator_standard(waveform_approximant: str, reference_frequency, minimum_frequency, duration, sampling_frequency,
-    frequency_domain_source_model=bilby.gw.source.lal_binary_black_hole, waveform_arguments=None,  fundamental_mode=False
+
+def setup_waveform_generator_standard(
+    waveform_approximant: str,
+    reference_frequency: float,
+    minimum_frequency: float,
+    duration: float,
+    sampling_frequency: float,
+    frequency_domain_source_model=bilby.gw.source.lal_binary_black_hole,
+    waveform_arguments: dict = None,
+    fundamental_mode: bool = False,
 ):
-    # Check for waveform approcimant string
-    # FIXME: Not always raising error
+    """
+    Sets up a standard waveform generator using bilby.
+
+    Parameters
+    ----------
+    waveform_approximant : str
+        The name of the waveform approximant to use.
+    reference_frequency : float
+        The reference frequency for the waveform in Hz.
+    minimum_frequency : float
+        The minimum frequency for the waveform in Hz.
+    duration : float
+        The duration of the waveform in seconds.
+    sampling_frequency : float
+        The sampling frequency of the waveform in Hz.
+    frequency_domain_source_model : callable, optional
+        The frequency domain source model function (default: bilby.gw.source.lal_binary_black_hole).
+    waveform_arguments : dict, optional
+        Additional arguments to pass to the waveform generator.
+    fundamental_mode : bool, optional
+        If True, restricts to the fundamental mode only.
+
+    Returns
+    -------
+    bilby.gw.WaveformGenerator
+        A configured waveform generator instance.
+
+    Raises
+    ------
+    ValueError
+        If the waveform approximant is unknown.
+    """
     try:
         approximant = LS.GetApproximantFromString(waveform_approximant)
     except:
@@ -20,38 +80,102 @@ def setup_waveform_generator_standard(waveform_approximant: str, reference_frequ
 
     # Fixed arguments passed into the source model
     if waveform_arguments is None:
-        waveform_arguments = dict(waveform_approximant=waveform_approximant, reference_frequency=reference_frequency,
-        minimum_frequency=minimum_frequency, catch_waveform_errors=True)
-        # Only for NRHybSur3dq8, if not all_mode
-        if waveform_approximant=='NRHybSur3dq8' and fundamental_mode:
-            waveform_arguments['mode_array']=[(2,2),(2,-2)]
+        waveform_arguments = {
+            "waveform_approximant": waveform_approximant,
+            "reference_frequency": reference_frequency,
+            "minimum_frequency": minimum_frequency,
+            "catch_waveform_errors": True,
+        }
+        if waveform_approximant == "NRHybSur3dq8" and fundamental_mode:
+            waveform_arguments["mode_array"] = [(2, 2), (2, -2)]
+
     return bilby.gw.WaveformGenerator(
-        duration=duration, sampling_frequency=sampling_frequency,
+        duration=duration,
+        sampling_frequency=sampling_frequency,
         frequency_domain_source_model=frequency_domain_source_model,
         parameter_conversion=bilby.gw.conversion.convert_to_lal_binary_black_hole_parameters,
-        waveform_arguments=waveform_arguments)
+        waveform_arguments=waveform_arguments,
+    )
 
 
-def setup_waveform_generator_with_uncertainty(reference_frequency, minimum_frequency, duration, sampling_frequency):
-    waveform_approximant = 'SEOBNRv4_ROM'
-    waveform_arguments = dict(waveform_approximant=waveform_approximant, 
-        reference_frequency=reference_frequency, minimum_frequency=minimum_frequency)
-    # Load SEOBNRv4 waveform uncertainty model
-    sys.path.append('/work/pi_mpuerrer_uri_edu/ritesh/wf-uncertainty-marg')
-    import eob_gpr_model
-    gpr_model_data_path = '/work/pi_mpuerrer_uri_edu/projects/wf_uncertainty_marg/data/uncertainty_interpolation_Mtot-50_fmin-20.0.hdf5'
-    wferr = eob_gpr_model.WaveformUncertaintyInterpolation()
-    wferr.load_interpolation(gpr_model_data_path)
-    waveform_arguments['waveform_error_model'] = wferr
-    frequency_domain_source_model = eob_gpr_model.lal_binary_black_hole_with_waveform_uncertainty
-    return setup_waveform_generator_standard(waveform_approximant, reference_frequency, minimum_frequency,
-        duration, sampling_frequency, frequency_domain_source_model=frequency_domain_source_model,
-        waveform_arguments=waveform_arguments)
-
-
-def setup_ifos_and_injection(injection_parameters, sampling_frequency, duration, minimum_frequency,
-    use_zero_noise: bool, ifo_list=['H1', 'L1', 'V1']
+def setup_waveform_generator_with_uncertainty(
+    reference_frequency: float, minimum_frequency: float, duration: float, sampling_frequency: float
 ):
+    """
+    Sets up a waveform generator with waveform uncertainty modeling using SEOBNRv4_ROM.
+
+    Parameters
+    ----------
+    reference_frequency : float
+        The reference frequency for the waveform in Hz.
+    minimum_frequency : float
+        The minimum frequency for the waveform in Hz.
+    duration : float
+        The duration of the waveform in seconds.
+    sampling_frequency : float
+        The sampling frequency of the waveform in Hz.
+
+    Returns
+    -------
+    bilby.gw.WaveformGenerator
+        A configured waveform generator instance with uncertainty modeling.
+    """
+    waveform_approximant = "SEOBNRv4_ROM"
+    waveform_arguments = {
+        "waveform_approximant": waveform_approximant,
+        "reference_frequency": reference_frequency,
+        "minimum_frequency": minimum_frequency,
+    }
+    gpr_model_data_path = os.path.join(os.path.dirname(seobnrv4ce.__file__),
+        "../data/uncertainty_interpolation_Mtot-50_fmin-20.0.hdf5")
+    wferr = seobnrv4ce.WaveformUncertaintyInterpolation()
+    wferr.load_interpolation(gpr_model_data_path)
+    waveform_arguments["waveform_error_model"] = wferr
+
+    frequency_domain_source_model = seobnrv4ce.lal_binary_black_hole_with_waveform_uncertainty
+
+    return setup_waveform_generator_standard(
+        waveform_approximant,
+        reference_frequency,
+        minimum_frequency,
+        duration,
+        sampling_frequency,
+        frequency_domain_source_model=frequency_domain_source_model,
+        waveform_arguments=waveform_arguments,
+    )
+
+
+def setup_ifos_and_injection(
+    injection_parameters: dict,
+    sampling_frequency: float,
+    duration: float,
+    minimum_frequency: float,
+    use_zero_noise: bool,
+    ifo_list=['H1', 'L1', 'V1']
+):
+    """
+    Sets up interferometers and injects a gravitational wave signal.
+
+    Parameters
+    ----------
+    injection_parameters : dict
+        Dictionary containing the injection parameters of the gravitational wave source.
+    sampling_frequency : float
+        The sampling frequency of the interferometer in Hz.
+    duration : float
+        The duration of the signal in seconds.
+    minimum_frequency : float
+        The minimum frequency of the interferometer in Hz.
+    use_zero_noise : bool
+        If True, uses zero noise realization. Otherwise, uses the power spectral density.
+    ifo_list : list of str, optional
+        List of interferometers to use (default: ['H1', 'L1', 'V1']).
+
+    Returns
+    -------
+    bilby.gw.detector.InterferometerList
+        A list of configured interferometers with the injected signal.
+    """
     start_time = injection_parameters['geocent_time'] - 3
     ifos = bilby.gw.detector.InterferometerList(ifo_list)
     for ifo in ifos:
@@ -69,6 +193,25 @@ def setup_ifos_and_injection(injection_parameters, sampling_frequency, duration,
 
 
 def setup_standard_prior(mc_min=25.0, mc_max=50.0, q_min=0.125, chi_max=0.8):
+    """
+    Sets up standard priors for gravitational wave parameter estimation.
+
+    Parameters
+    ----------
+    mc_min : float, optional
+        Minimum chirp mass in solar masses (default: 25.0).
+    mc_max : float, optional
+        Maximum chirp mass in solar masses (default: 50.0).
+    q_min : float, optional
+        Minimum mass ratio (default: 0.125).
+    chi_max : float, optional
+        Maximum dimensionless spin magnitude (default: 0.8).
+
+    Returns
+    -------
+    bilby.gw.prior.BBHPriorDict
+        A dictionary of priors for the binary black hole parameters.
+    """
     priors = bilby.gw.prior.BBHPriorDict(aligned_spin=True)
     priors.pop('mass_1')
     priors.pop('mass_2')
@@ -91,46 +234,184 @@ def setup_standard_prior(mc_min=25.0, mc_max=50.0, q_min=0.125, chi_max=0.8):
     return priors
 
 
-def setup_uncertainty_model_priors(priors, uncertainty_parameters, sigma):
-    # Add Gaussian priors for uncertainty parameters in amplitude and phase
+def setup_uncertainty_model_priors(
+    priors: bilby.core.prior.PriorDict,
+    uncertainty_parameters: list,
+    sigma: float
+):
+    """
+    Adds Gaussian priors for uncertainty parameters in amplitude and phase.
+
+    Parameters
+    ----------
+    priors : bilby.core.prior.PriorDict
+        The prior dictionary to update.
+    uncertainty_parameters : list of str
+        List of uncertainty parameter names to be included in the prior.
+    sigma : float
+        Standard deviation for the Gaussian priors.
+
+    Returns
+    -------
+    None
+    """
     for p in uncertainty_parameters:
         priors[p] = bilby.core.prior.Gaussian(mu=0.0, sigma=sigma, name=p, unit=None)
 
 
-def pin_uncertainty_model_parameters(priors, uncertainty_parameters):
+def pin_uncertainty_model_parameters(
+    priors: bilby.core.prior.PriorDict,
+    uncertainty_parameters: list
+):
+    """
+    Pins the uncertainty model parameters by setting them to zero.
+
+    Parameters
+    ----------
+    priors : bilby.core.prior.PriorDict
+        The prior dictionary to update.
+    uncertainty_parameters : list of str
+        List of uncertainty parameter names to pin.
+
+    Returns
+    -------
+    None
+    """
     # We don't sample in \epsilon here, instead we just set \epsilon = 0.
     for p in uncertainty_parameters:
         priors[p] = 0.0
 
 
-def pin_standard_parameters(priors, injection_parameters):
-    # Pin all standard parameters except geocent_time and phase
+def pin_standard_parameters(
+    priors: bilby.core.prior.PriorDict,
+    injection_parameters: dict
+):
+    """
+    Pins all standard parameters except geocentric time and phase.
+
+    Parameters
+    ----------
+    priors : bilby.core.prior.PriorDict
+        The prior dictionary to update.
+    injection_parameters : dict
+        The injection parameters dictionary.
+
+    Returns
+    -------
+    None
+    """
     for key in ['mass_ratio', 'chi_1', 'chi_2', 'luminosity_distance', 'ra', 'dec', 'theta_jn', 'psi']:
         priors[key] = injection_parameters[key]
 
 
-def pin_extrinsic_parameters(priors, injection_parameters):
-    # Pin all extrinsic parameters except geocent_time and phase
+def pin_extrinsic_parameters(
+    priors: bilby.core.prior.PriorDict,
+    injection_parameters: dict
+):
+    """
+    Pins all extrinsic parameters except geocentric time and phase.
+
+    Parameters
+    ----------
+    priors : bilby.core.prior.PriorDict
+        The prior dictionary to update.
+    injection_parameters : dict
+        The injection parameters dictionary.
+
+    Returns
+    -------
+    None
+    """
     for key in ['luminosity_distance', 'ra', 'dec', 'theta_jn', 'psi']:
         priors[key] = injection_parameters[key]
 
 
-def pin_spin_parameters(priors, injection_parameters):
-    # Pin chi_1 and chi_2
+def pin_spin_parameters(
+    priors: bilby.core.prior.PriorDict,
+    injection_parameters: dict
+):
+    """
+    Pins the spin parameters chi_1 and chi_2.
+
+    Parameters
+    ----------
+    priors : bilby.core.prior.PriorDict
+        The prior dictionary to update.
+    injection_parameters : dict
+        The injection parameters dictionary.
+
+    Returns
+    -------
+    None
+    """
     for key in ['chi_1', 'chi_2']:
         priors[key] = injection_parameters[key]
 
 
-def setup_uncertainty_parameters(injection_parameters, uncertainty_parameters):
-    # Only needed for SEOBNRv4CE0 signal
+def setup_uncertainty_parameters(
+    injection_parameters: dict,
+    uncertainty_parameters: list
+):
+    """
+    Sets up uncertainty parameters by initializing them to zero.
+
+    Parameters
+    ----------
+    injection_parameters : dict
+        The injection parameters dictionary.
+    uncertainty_parameters : list of str
+        List of uncertainty parameter names to initialize.
+
+    Returns
+    -------
+    None
+    """
     for p in uncertainty_parameters:
         injection_parameters[p] = 0.0
 
 
-def setup_likelihood_and_sampler(ifos, waveform_generator_template, priors, label,
+def setup_likelihood_and_sampler(
+    ifos, waveform_generator_template, priors, label,
     sampler='dynesty', distance_marginalization=True, phase_marginalization=True, time_marginalization=True,
-    sample = "acceptance-walk", naccept=100, npoints=1024, maxmcmc=5000, npool=64
+    sample="acceptance-walk", naccept=100, npoints=1024, maxmcmc=5000, npool=64
 ):
+    """
+    Sets up the likelihood function and runs the sampler for parameter estimation.
+
+    Parameters
+    ----------
+    ifos : bilby.gw.detector.InterferometerList
+        List of interferometers used in the analysis.
+    waveform_generator_template : bilby.gw.WaveformGenerator
+        The waveform generator used as a template.
+    priors : bilby.core.prior.PriorDict
+        The dictionary of priors for the parameter estimation.
+    label : str
+        Label for the output directory and result files.
+    sampler : str, optional
+        The sampler to use for inference (default: 'dynesty').
+    distance_marginalization : bool, optional
+        Whether to marginalize over distance (default: True).
+    phase_marginalization : bool, optional
+        Whether to marginalize over phase (default: True).
+    time_marginalization : bool, optional
+        Whether to marginalize over time (default: True).
+    sample : str, optional
+        The sampling method for dynesty (default: 'acceptance-walk').
+    naccept : int, optional
+        The number of accepted steps during each chain (default: 100).
+    npoints : int, optional
+        The number of live points for dynesty (default: 1024).
+    maxmcmc : int, optional
+        Maximum number of MCMC steps (default: 5000).
+    npool : int, optional
+        The number of parallel chains (default: 64).
+
+    Returns
+    -------
+    bilby.core.result.Result
+        The result object containing posterior samples and analysis results.
+    """
     likelihood = bilby.gw.GravitationalWaveTransient(
         interferometers=ifos, waveform_generator=waveform_generator_template, priors=priors,
         distance_marginalization=distance_marginalization, phase_marginalization=phase_marginalization,
@@ -140,7 +421,7 @@ def setup_likelihood_and_sampler(ifos, waveform_generator_template, priors, labe
     if sampler == 'dynesty':
         # See https://lscsoft.docs.ligo.org/bilby/api/bilby.core.sampler.dynesty.Dynesty.html
         # and https://lscsoft.docs.ligo.org/bilby/dynesty-guide.html
-        # Note: Should really first run a single analysis with sample="act-walk" to estimate a viable
+        # Note: first run a single analysis with sample="act-walk" to estimate a viable
         # number of accepted steps before switching to acceptance-walk.
         result = bilby.run_sampler(
             likelihood=likelihood, priors=priors, sampler=sampler,
@@ -176,7 +457,18 @@ def setup_likelihood_and_sampler(ifos, waveform_generator_template, priors, labe
 
 
 def make_reduced_corner_plots(result):
-    # Make corner plots for intrinsic parameters
+    """
+    Generates reduced corner plots for intrinsic parameters of the gravitational wave source.
+
+    Parameters
+    ----------
+    result : bilby.core.result.Result
+        The result object containing posterior samples and analysis results.
+
+    Returns
+    -------
+    None
+    """
     pars_to_plot = {}
     for p in ['chirp_mass', 'mass_ratio', 'theta_jn', 'luminosity_distance']:
         pars_to_plot[p] = result.injection_parameters[p]
@@ -191,6 +483,14 @@ def make_reduced_corner_plots(result):
 
 
 def parse_args():
+    """
+    Parses command-line arguments for the gravitational wave parameter estimation analysis.
+
+    Returns
+    -------
+    argparse.Namespace
+        A namespace containing parsed command-line arguments.
+    """
     parser = argparse.ArgumentParser(description="Analyze an aligned-spin injection with bilby.")
     parser.add_argument("--signal_approximant", type=str, required=True, help="Waveform model to use as signal.")
     parser.add_argument("--template_approximant", type=str, required=True, help="Waveform model to use as template.")
@@ -216,12 +516,18 @@ def parse_args():
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def main():
+    """
+    Main function to execute the gravitational wave parameter estimation pipeline.
+
+    This function parses command-line arguments, sets up the waveform generator,
+    performs parameter estimation using bilby, and generates corner plots of results.
+
+    Returns
+    -------
+    None
+    """
     args = parse_args()
-    # Old way
-    # signal_str = args.signal_approximant + '_22' if args.fundamental_mode_signal else args.signal_approximant
-    # template_str = args.template_approximant + '_22' if args.fundamental_mode_template else args.template_approximant
-    # Updated way
     if "_22" in args.signal_approximant:
         signal_str = args.signal_approximant
         args.signal_approximant = args.signal_approximant.replace("_22", "")
@@ -260,18 +566,21 @@ if __name__ == '__main__':
 
     np.random.seed(88170235) # For reproducibility with noise realizations
 
-    waveform_generator_signal = setup_waveform_generator_standard(args.signal_approximant, reference_frequency,
-                                                                  minimum_frequency, duration, sampling_frequency, fundamental_mode=args.fundamental_mode_signal)
+    waveform_generator_signal = setup_waveform_generator_standard(
+        args.signal_approximant, reference_frequency, minimum_frequency, duration,
+        sampling_frequency, fundamental_mode=args.fundamental_mode_signal)
     if args.template_approximant == 'SEOBNRv4CE' or args.template_approximant == 'SEOBNRv4CE0':
         waveform_generator_template = setup_waveform_generator_with_uncertainty(
             reference_frequency, minimum_frequency, duration, sampling_frequency)
         uncertainty_parameters = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10',
                                   'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
     else:
-        waveform_generator_template = setup_waveform_generator_standard(
-            args.template_approximant, reference_frequency, minimum_frequency, duration, sampling_frequency, fundamental_mode=args.fundamental_mode_template)
+        waveform_generator_template = setup_waveform_generator_standard(args.template_approximant,
+        reference_frequency, minimum_frequency, duration, sampling_frequency,
+        fundamental_mode=args.fundamental_mode_template)
 
-    ifos = setup_ifos_and_injection(injection_parameters, sampling_frequency, duration, minimum_frequency, use_zero_noise=args.zero_noise)
+    ifos = setup_ifos_and_injection(
+        injection_parameters, sampling_frequency, duration, minimum_frequency, use_zero_noise=args.zero_noise)
     if injection_parameters['mass_ratio'] < 0.3 and args.signal_approximant!="NRHybSur3dq8":
         q_min = 1.0/16.0
     elif injection_parameters['mass_ratio'] < 0.3 and args.signal_approximant=="NRHybSur3dq8":
@@ -304,3 +613,7 @@ if __name__ == '__main__':
         phase_marginalization=args.phase_marginalization, time_marginalization=args.time_marginalization,
         sample = "acceptance-walk", naccept=args.naccept, npoints=args.npoints, maxmcmc=args.maxmcmc, npool=args.npool)
     make_reduced_corner_plots(result)
+
+
+if __name__ == '__main__':
+    main()
