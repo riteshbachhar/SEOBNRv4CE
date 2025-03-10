@@ -35,6 +35,12 @@ dependencies = [
     "scipy"
 ]
 
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+seobnrv4ce = ["data/*", "scripts/*"]
+
 [tool.setuptools.packages.find]
 include = ["seobnrv4ce*"]
 namespaces = false
