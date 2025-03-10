@@ -65,3 +65,6 @@ dev = [
     "pylint",
     "pytest",
 ]
+
+[project.scripts]
+bilby_analyze_injection = "seobnrv4ce.scripts.bilby_analyze_injection:main"
