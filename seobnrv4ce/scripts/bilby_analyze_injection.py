@@ -32,8 +32,6 @@ import lalsimulation as LS
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import seobnrv4ce
 
-
-
 def setup_waveform_generator_standard(
     waveform_approximant: str,
     reference_frequency: float,
@@ -100,7 +98,6 @@ def setup_waveform_generator_standard(
         waveform_arguments=waveform_arguments,
     )
 
-
 def setup_waveform_generator_with_uncertainty(
     reference_frequency: float, minimum_frequency: float, duration: float, sampling_frequency: float
 ):
@@ -129,10 +126,8 @@ def setup_waveform_generator_with_uncertainty(
         "reference_frequency": reference_frequency,
         "minimum_frequency": minimum_frequency,
     }
-    gpr_model_data_path = os.path.join(os.path.dirname(seobnrv4ce.__file__),
-        "../data/uncertainty_interpolation_Mtot-50_fmin-20.0.hdf5")
     wferr = seobnrv4ce.WaveformUncertaintyInterpolation()
-    wferr.load_interpolation(gpr_model_data_path)
+    wferr.load_interpolation()
     waveform_arguments["waveform_error_model"] = wferr
 
     frequency_domain_source_model = seobnrv4ce.lal_binary_black_hole_with_waveform_uncertainty
@@ -146,7 +141,6 @@ def setup_waveform_generator_with_uncertainty(
         frequency_domain_source_model=frequency_domain_source_model,
         waveform_arguments=waveform_arguments,
     )
-
 
 def setup_ifos_and_injection(
     injection_parameters: dict,
@@ -194,7 +188,6 @@ def setup_ifos_and_injection(
     ifos.inject_signal(waveform_generator=waveform_generator_signal, parameters=injection_parameters)
     return ifos
 
-
 def setup_standard_prior(mc_min=25.0, mc_max=50.0, q_min=0.125, chi_max=0.8):
     """
     Sets up standard priors for gravitational wave parameter estimation.
@@ -236,7 +229,6 @@ def setup_standard_prior(mc_min=25.0, mc_max=50.0, q_min=0.125, chi_max=0.8):
 
     return priors
 
-
 def setup_uncertainty_model_priors(
     priors: bilby.core.prior.PriorDict,
     uncertainty_parameters: list,
@@ -261,7 +253,6 @@ def setup_uncertainty_model_priors(
     for p in uncertainty_parameters:
         priors[p] = bilby.core.prior.Gaussian(mu=0.0, sigma=sigma, name=p, unit=None)
 
-
 def pin_uncertainty_model_parameters(
     priors: bilby.core.prior.PriorDict,
     uncertainty_parameters: list
@@ -284,7 +275,6 @@ def pin_uncertainty_model_parameters(
     for p in uncertainty_parameters:
         priors[p] = 0.0
 
-
 def pin_standard_parameters(
     priors: bilby.core.prior.PriorDict,
     injection_parameters: dict
@@ -305,7 +295,6 @@ def pin_standard_parameters(
     """
     for key in ['mass_ratio', 'chi_1', 'chi_2', 'luminosity_distance', 'ra', 'dec', 'theta_jn', 'psi']:
         priors[key] = injection_parameters[key]
-
 
 def pin_extrinsic_parameters(
     priors: bilby.core.prior.PriorDict,
@@ -328,7 +317,6 @@ def pin_extrinsic_parameters(
     for key in ['luminosity_distance', 'ra', 'dec', 'theta_jn', 'psi']:
         priors[key] = injection_parameters[key]
 
-
 def pin_spin_parameters(
     priors: bilby.core.prior.PriorDict,
     injection_parameters: dict
@@ -350,7 +338,6 @@ def pin_spin_parameters(
     for key in ['chi_1', 'chi_2']:
         priors[key] = injection_parameters[key]
 
-
 def setup_uncertainty_parameters(
     injection_parameters: dict,
     uncertainty_parameters: list
@@ -371,7 +358,6 @@ def setup_uncertainty_parameters(
     """
     for p in uncertainty_parameters:
         injection_parameters[p] = 0.0
-
 
 def setup_likelihood_and_sampler(
     ifos, waveform_generator_template, priors, label,
@@ -458,7 +444,6 @@ def setup_likelihood_and_sampler(
         raise ValueError(f'Sampler {sampler} not supported')
     return result
 
-
 def make_reduced_corner_plots(result):
     """
     Generates reduced corner plots for intrinsic parameters of the gravitational wave source.
@@ -483,7 +468,6 @@ def make_reduced_corner_plots(result):
     for p in ['chirp_mass', 'mass_ratio', 'chi_eff', 'theta_jn', 'luminosity_distance']:
         pars_to_plot_eff[p] = result.injection_parameters[p]
     result.plot_corner(parameters=pars_to_plot_eff, filename=f"{outdir}/corner_intrinsic2.png")
-
 
 def parse_args():
     """
@@ -518,7 +502,6 @@ def parse_args():
     parser.add_argument("--label", type=str, default='', help="Label to be appended to 'signal_template'.")
     return parser.parse_args()
 
-
 def main():
     """
     Main function to execute the gravitational wave parameter estimation pipeline.
@@ -539,7 +522,7 @@ def main():
         signal_str = args.signal_approximant
         args.signal_approximant = args.signal_approximant
         args.fundamental_mode_signal = False
-        
+
     if "_22" in args.template_approximant:
         template_str = args.template_approximant
         args.template_approximant = args.template_approximant.replace("_22", "")
@@ -548,7 +531,7 @@ def main():
         template_str = args.template_approximant
         args.template_approximant = args.template_approximant
         args.fundamental_mode_template = False
-        
+
     label = signal_str + '_' + template_str
     if args.label != '':
         label += '_' + args.label
@@ -591,7 +574,7 @@ def main():
         q_min = 1.0/10.0
     else:
         q_min = 1.0/4.0
-    
+
     # Prior setup
     priors = setup_standard_prior(mc_min=25.0, mc_max=50.0, q_min=q_min, chi_max=0.8)
     if args.template_approximant == 'SEOBNRv4CE':
@@ -602,7 +585,7 @@ def main():
     # Pinning all standard parameters except geocentric_time and phase
     if args.pin_parameters:
         pin_standard_parameters(priors, injection_parameters)
-    
+
     # Pinning all extrinsic parameters expect geocentric_time and phase
     if args.pin_extrinsic_parameters:
         pin_extrinsic_parameters(priors, injection_parameters)
@@ -616,7 +599,6 @@ def main():
         phase_marginalization=args.phase_marginalization, time_marginalization=args.time_marginalization,
         sample = "acceptance-walk", naccept=args.naccept, npoints=args.npoints, maxmcmc=args.maxmcmc, npool=args.npool)
     make_reduced_corner_plots(result)
-
 
 if __name__ == '__main__':
     main()

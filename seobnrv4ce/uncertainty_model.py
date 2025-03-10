@@ -13,7 +13,7 @@
 # does require a database of waveforms *or* a previously saved
 # uncertainty model.
 
-
+import os
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
@@ -28,12 +28,9 @@ from sklearn.multioutput import MultiOutputRegressor
 
 data_dir = r'../data/'
 
-
-
 #
 # Uncertainty at a given point in physical parameter space.
 #
-
 
 class WaveformUncertainty(object):
     """Represents the waveform uncertainty at one point in physical
@@ -43,7 +40,7 @@ class WaveformUncertainty(object):
     """
 
     EPSILON = 1e-9
-     
+
     def __init__(self, filename, cfg, f_nodes):
         """Initializes object to contain waveform samples drawn from the
         calibration posterior at a particular configuration. This data
@@ -62,9 +59,9 @@ class WaveformUncertainty(object):
         f_nodes: frequency nodes at which to represent the
             distribution over waveforms
 
-        """        
+        """
         fs = h5py.File(filename, 'r')
-        
+
         self.cfg = cfg
         self.q = fs[cfg].attrs['q']
         self.chi1 = fs[cfg].attrs['chi1']
@@ -77,16 +74,15 @@ class WaveformUncertainty(object):
         phi = np.array(fs[cfg+'/phi'][:])
         amp_eob = np.array(fs[cfg+'/amp_EOB'][:])
         phi_eob = np.array(fs[cfg+'/phi_EOB'][:])
-        
+
         self.nsamples = len(amp)
-        
+
         self.generate_diffs(amp, phi, amp_eob, phi_eob)
         self.generate_reduced_representation(f_nodes)
         self.generate_mean_and_cov()
-        
+
         fs.close()
-        
-        
+
     def generate_diffs(self, amp_draw_array, phi_draw_array, amp_eob, phi_eob):
         """Computes the deviations between sampled waveforms and EOB waveform.
         Stores the amplitude deviation as the fractional deviation
@@ -100,7 +96,7 @@ class WaveformUncertainty(object):
         amp_eob:  amplitude of EOB waveform
         phi_eob:  phase of EOB waveform
 
-        """        
+        """
         # a_eob, b_eob = self.linear_fit(phi_eob)
         amp_diff_list = []
         phi_diff_list = []
@@ -108,7 +104,7 @@ class WaveformUncertainty(object):
             phi_draw = phi_draw_array[i]
             amp_draw = amp_draw_array[i]
             # a_draw, b_draw = self.linear_fit(phi_draw)
-            #phi_diff = (phi_draw - a_draw*self.f_grid - b_draw 
+            #phi_diff = (phi_draw - a_draw*self.f_grid - b_draw
             #            - (phi_eob - a_eob*self.f_grid - b_eob))
             phi_diff = phi_draw - phi_eob
             #amp_diff = amp_draw - amp_eob
@@ -122,28 +118,26 @@ class WaveformUncertainty(object):
         self.amp_eob = amp_eob
         self.phi_array = phi_draw_array
         self.phi_eob = phi_eob
-            
+
         self.amp_diff_array = np.array(amp_diff_list)
         self.phi_diff_array = np.array(phi_diff_list)
-        
-        
+
     def linear_fit(self, phi):
-        """Perform a linear fit to function phi."""        
+        """Perform a linear fit to function phi."""
         a, b, r_value, p_value, std_err = stats.linregress(self.f_grid, phi)
         return a, b
-    
-    
+
     def resample_grid(self, x, y, new_x):
         """Resample the array y (defined at x) at new points new_x.  y can be
         a NxM array; function iterates through rows N.
 
-        """        
+        """
         assert y.ndim == 1 or y.ndim == 2
-        
+
         if y.ndim == 1:
             yI = spline(x, y)
             return yI(new_x)
-        
+
         elif y.ndim == 2:
             new_y_list = []
             for i in range(len(y)):
@@ -163,7 +157,7 @@ class WaveformUncertainty(object):
         """
         if (f_nodes[0] < self.f_min - self.EPSILON or
             f_nodes[-1] > self.f_max + self.EPSILON):
-            raise Exception("""Error: new frequency nodes {0}...{1} out 
+            raise Exception("""Error: new frequency nodes {0}...{1} out
                                 of bounds [{2},{3}].""".format(f_nodes[0], f_nodes[-1],
                                                                self.f_min, self.f_max))
 
@@ -173,25 +167,25 @@ class WaveformUncertainty(object):
                                                    self.nodes)
         self.phi_diff_reduced = self.resample_grid(self.f_grid, self.phi_diff_array,
                                                    self.nodes)
-        
+
     def generate_mean_and_cov(self):
         """Combines amplitude and phase of reduced representation into one
         array and compute mean and covariance matrices. Store the
         covariance also as its Cholesky decomposition.
 
-        """        
+        """
         stacked_diffs = np.hstack((self.amp_diff_reduced,
-                                   self.phi_diff_reduced))   
+                                   self.phi_diff_reduced))
         self.mean_diffs = np.mean(stacked_diffs, axis=0)
         self.cov_diffs = np.cov(stacked_diffs, rowvar=False)
-    
+
         # Express the covariance in terms of its Cholesky
         # decomposition. This quantity is more suitable for
         # interpolating across paramater space because it is better
         # able to enforce positivity.
-        
+
         self.chol = scipy.linalg.cholesky(self.cov_diffs, lower=True)
-        
+
     def draw_reduced_sample(self):
         """Sample from the approximate distribution.
 
@@ -203,36 +197,35 @@ class WaveformUncertainty(object):
         reduced_sample = (self.mean_diffs
                           + np.matmul(self.chol,
                                       np.random.normal(size=2*self.degree)))
-    
+
         amp_sample_reduced = reduced_sample[:self.degree]
         phi_sample_reduced = reduced_sample[self.degree:]
-        
+
         return amp_sample_reduced, phi_sample_reduced
-                    
+
     def draw_sample(self):
         """Draws a sample waveform difference from the gaussian
         distribution.
 
         Returns
         -------
-        Three lists: frequency nodes, fractional amplitude difference, 
+        Three lists: frequency nodes, fractional amplitude difference,
         phase difference.
         """
         amp_sample_nodes, phi_sample_nodes = self.draw_reduced_sample()
         return self.nodes, amp_sample_nodes, phi_sample_nodes
 
-    
     #
     # Plotting tools
     #
-    
+
     def plot_diffs(self, nsamples=50, save=False, fn="figure"):
         """Plot some waveform diffs"""
-        
+
         # Randomly select some samples
         n = min(nsamples, len(self.amp_diff_array))
         selection = np.random.choice(list(range(len(self.amp_diff_array))),
-                                     size=n, replace=False)        
+                                     size=n, replace=False)
         fig = plt.figure(figsize=(16,6))
         fig.suptitle((r'{0}: $q = {1}$, $\chi_1 = {2}$, $\chi_2 = {3}$; \
                       $M_{{\mathrm{{tot}}}} = {4}$').format(self.cfg, self.q,
@@ -242,15 +235,15 @@ class WaveformUncertainty(object):
         mask = np.all((self.f_grid >= self.nodes[0],
                        self.f_grid <= self.nodes[-1]),
                       axis=0)
-        
+
         ax1 = plt.subplot(121)
         for i in selection:
             plt.plot(self.f_grid[mask], self.phi_diff_array[i,mask], linewidth=0.5)
-        plt.xlabel(r'$f$')    
+        plt.xlabel(r'$f$')
         plt.ylabel(r'$\Delta\phi$')
         plt.xscale('log')
         plt.xlim(self.nodes[0], self.nodes[-1])
-        
+
         ax2 = plt.subplot(122)
         for i in selection:
             plt.plot(self.f_grid[mask], self.amp_diff_array[i,mask], linewidth=0.5)
@@ -258,31 +251,31 @@ class WaveformUncertainty(object):
         plt.ylabel(r'$\Delta A/A_{\mathrm{EOB}}$')
         plt.xscale('log')
         plt.xlim(self.nodes[0], self.nodes[-1])
-    
+
         if save:
             plt.savefig(fn)
         plt.show()
 
-    def plot_generated_diffs(self, nsamples=50, save=False, fn='figure'):        
+    def plot_generated_diffs(self, nsamples=50, save=False, fn='figure'):
         generated_diffs = []
         for i in range(nsamples):
             generated_diffs.append(self.draw_reduced_sample())
-        
+
         fig = plt.figure(figsize=(16,6))
         fig.suptitle((r'{0}: $q = {1}$, $\chi_1 = {2}$, $\chi_2 = {3}$;\
                       $M_{{\mathrm{{tot}}}} = {4}$').format(self.cfg, self.q,
                                                             self.chi1, self.chi2,
                                                             self.Mtot))
-    
+
         ax1 = plt.subplot(121)
         for diff in generated_diffs:
             plt.plot(self.nodes, diff[1], linewidth=0.5)
         plt.scatter(self.nodes, self.mean_diffs[self.degree:])
-        plt.xlabel(r'$f$')    
+        plt.xlabel(r'$f$')
         plt.ylabel(r'$\Delta\phi$')
         plt.xscale('log')
         plt.xlim(self.nodes[0], self.nodes[-1])
-    
+
         ax2 = plt.subplot(122)
         for diff in generated_diffs:
             plt.plot(self.nodes, diff[0], linewidth=0.5)
@@ -291,13 +284,11 @@ class WaveformUncertainty(object):
         plt.ylabel(r'$\Delta A / A_{\textrm{EOB}}$')
         plt.xscale('log')
         plt.xlim(self.nodes[0], self.nodes[-1])
-        
+
         if save:
             plt.savefig(fn)
         plt.show()
 
-
-        
 class WaveformUncertaintyInterpolation(dict):
     """Object that interpolates waveform uncertainty across parameter space."""
 
@@ -308,8 +299,8 @@ class WaveformUncertaintyInterpolation(dict):
     def __init__(self, *args, **kwargs):
         dict.__init__(self, *args, **kwargs)
         self.waveforms_present = False
-        self.interpolation_present = False        
-        
+        self.interpolation_present = False
+
     def generate_interpolation(self, interpolation_degree):
         """Builds the interpolation throughout physical parameter space,
         either polynomial or gpr.
@@ -317,26 +308,26 @@ class WaveformUncertaintyInterpolation(dict):
         Args:
             interpolation_degree: The degree of the interpolation.
 
-        """        
+        """
         wf_uncertainties_train = [self.wf_uncertainties[i]
                                   for i in self.train_selection]
-        
+
         # Training set parameters
         params_train = np.array([[wfu.q, wfu.chi1, wfu.chi2]
                                  for wfu in wf_uncertainties_train])
-        
+
         # Training set targets: mean and covariance of distribution, repackaged
         means_train = np.array([wfu.mean_diffs for wfu in wf_uncertainties_train])
         chols_train = np.array([wfu.chol[np.tril_indices(2*self.degree)]
-                                for wfu in wf_uncertainties_train])        
+                                for wfu in wf_uncertainties_train])
         y_train = np.hstack((means_train, chols_train))
-        
+
         if self.method == 'polynomial':
             # Polynomial interpolation
             self.poly = PolynomialFeatures(degree=interpolation_degree)
-            params_train_poly = self.poly.fit_transform(params_train)        
+            params_train_poly = self.poly.fit_transform(params_train)
             self.reg = LinearRegression().fit(params_train_poly, y_train)
-        
+
         elif self.method == 'gpr':
             # Gaussian process regression
             # Define separate GP for each target in y_train
@@ -348,7 +339,7 @@ class WaveformUncertaintyInterpolation(dict):
                                    [1e-5, 1]])
                 gp = generate_gp(params_train, target, hp0,
                                  kernel_type=kernel_type, fixed=False,
-                                 hyper_limits=limits)                
+                                 hyper_limits=limits)
                 print('Hyperparameters ({0}/{1}): {2}'.format(i, len(y_train.T),
                                                               gp.kernel_))
                 self.gp_list.append(gp)
@@ -356,15 +347,15 @@ class WaveformUncertaintyInterpolation(dict):
     def initialize_reduced_grid(self, degree):
         """Constructs the frequency-grid for the uncertainty model."""
         self.degree = degree
-        
+
         # Impose a cutoff at a maximum Mf value of MF_MAX_CUTOFF. This
         # is to remove noisy features at high frequencies that we do
         # not want to model.
-        
+
         Mf_max = self.f_max * self.Mtot * self.SOLAR_MASS_S
         if Mf_max > self.MF_MAX_CUTOFF:
             self.f_max = self.MF_MAX_CUTOFF / (self.Mtot * self.SOLAR_MASS_S)
-        
+
         self.nodes = np.exp(np.linspace(np.log(self.f_min),
                                         np.log(self.f_max), self.degree))
 
@@ -377,7 +368,7 @@ class WaveformUncertaintyInterpolation(dict):
 
         Args:
         -----
-        filename: string, hdf5 filename 
+        filename: string, hdf5 filename
 
         degree: integer > 0; Degree of the interpolation. Corresponds
             to number of frequency nodes.
@@ -397,7 +388,7 @@ class WaveformUncertaintyInterpolation(dict):
         self.method = method
 
         self.db_filename = filename
-        
+
         f = h5py.File(filename, 'r')
         cfgs = list(f.keys())
         self.Mtot = f.attrs['Mtot']
@@ -406,7 +397,7 @@ class WaveformUncertaintyInterpolation(dict):
         f.close()
 
         self.initialize_reduced_grid(degree)
-        
+
         # Define WaveformUncertainty instances for each cfg.
         self.wf_uncertainties = []
         for cfg in cfgs:
@@ -418,20 +409,20 @@ class WaveformUncertaintyInterpolation(dict):
                                                 size=ntrain, replace=False)
         self.test_selection = [i for i in range(len(cfgs))
                                if i not in self.train_selection]
-        
+
         # Build the interpolation.
-    
+
         self.generate_interpolation(interpolation_degree)
 
         self.waveforms_present = True
         self.interpolation_present = True
-        
+
     def save_interpolation(self):
         """Save interpolation data to file."""
 
         if self.interpolation_present == False:
             raise Exception('Interpolation must be present to save it.')
-        
+
         fn = data_dir + r'uncertainty_interpolation_Mtot-{0}_fmin-{1}.hdf5'\
             .format(self.Mtot, self.f_min)
         f = h5py.File(fn, 'w')
@@ -456,10 +447,10 @@ class WaveformUncertaintyInterpolation(dict):
         # Save information about training vs test sets.
         f['train_selection'] = self.train_selection
         f['test_selection'] = self.test_selection
-                
+
         f.close()
 
-    def load_interpolation(self, fn, load_wf_db = False):
+    def load_interpolation(self, fn=None, load_wf_db=False):
         """Load interpolation data from a file.
 
         Parameters
@@ -467,6 +458,12 @@ class WaveformUncertaintyInterpolation(dict):
         fn : string
             hdf5 filename
         """
+        if fn is None:
+            # Use data file in this package
+            fname = "uncertainty_interpolation_Mtot-50_fmin-20.0.hdf5"
+            fn = os.path.join(os.path.dirname(__file__), f"data/{fname}")
+
+        print(f"Attempting to load datafile from {fn}")
         f = h5py.File(fn, 'r')
 
         self.Mtot = f.attrs['Mtot']
@@ -475,7 +472,7 @@ class WaveformUncertaintyInterpolation(dict):
         self.method = f.attrs['method']
         self.db_filename = f.attrs['db_filename']
         degree = f.attrs['degree']
-        
+
         self.initialize_reduced_grid(degree)
         if self.method == 'gpr':
             gpr_group = f['gpr']
@@ -499,7 +496,7 @@ class WaveformUncertaintyInterpolation(dict):
 
         if load_wf_db:
             self.reload_waveform_database()
-            
+
         f.close()
 
     def reload_waveform_database(self):
@@ -514,7 +511,7 @@ class WaveformUncertaintyInterpolation(dict):
 
         if self.interpolation_present == False:
             raise Exception('Requies interpolation to be present.')
-        
+
         f = h5py.File(self.db_filename, 'r')
         cfgs = list(f.keys())
         f.close()
@@ -526,7 +523,7 @@ class WaveformUncertaintyInterpolation(dict):
                 WaveformUncertainty(self.db_filename, cfg, self.nodes))
 
         self.waveforms_present = True
-        
+
     def predict_mean_chol(self, q, chi1, chi2):
         """Use model to predict mean and cholesky decomposition of covariance
            at a new point in physical parameter space.
@@ -540,15 +537,14 @@ class WaveformUncertaintyInterpolation(dict):
             y_prediction = np.zeros(len(self.gp_list))
             for i, gp in enumerate(self.gp_list):
                 y_prediction[i] = gp.predict([[q, chi1, chi2]])[0]
-        
+
         # Unpack prediction into mean and cholesky decomposition matrix
         mean_prediction = y_prediction[:2*self.degree]
         chol_prediction = np.zeros((2*self.degree, 2*self.degree))
         chol_prediction[np.tril_indices(2*self.degree)] = y_prediction[2*self.degree:]
-        
+
         return mean_prediction, chol_prediction
-    
-    
+
     def draw_samples(self, Mtot, q, chi1, chi2, nsamples=1, eps=None):
         """Samples from the predicted distribution for waveform deviation.
 
@@ -581,15 +577,15 @@ class WaveformUncertaintyInterpolation(dict):
         if eps is not None:
             if eps.shape != (nsamples, 2*self.degree):
                 raise Exception('eps must have shape (nsamples, 2*self.degree)')
-        
+
         Mtot_solar = Mtot / self.SOLAR_MASS_KG
-        
+
         # Get predicted mean and Cholesky decomposition (covariance)
         # of uncertainty. This depends on the point in physical
         # parameter space.
-        
+
         mean, chol = self.predict_mean_chol(q, chi1, chi2)
-        
+
         amp_sample_list = []
         phi_sample_list = []
         for i in range(nsamples):
@@ -598,12 +594,12 @@ class WaveformUncertaintyInterpolation(dict):
                 sample_eps = np.random.normal(size=2*self.degree)
             else:
                 sample_eps = eps[i]
-                
+
             sample = mean + np.matmul(chol, sample_eps)
-    
+
             amp_sample = sample[:self.degree]
             phi_sample = sample[self.degree:]
-            
+
             amp_sample_list.append(amp_sample)
             phi_sample_list.append(phi_sample)
 
@@ -612,10 +608,9 @@ class WaveformUncertaintyInterpolation(dict):
         # mass of the modeled waveform.
 
         shifted_frequency_nodes = self.nodes * self.Mtot / Mtot_solar
-            
+
         return (np.array(amp_sample_list), np.array(phi_sample_list),
                 shifted_frequency_nodes)
-
 
     def draw_sample(self, Mtot, q, chi1, chi2, eps=None):
         """Draws a single sample from the predicted distribution for waveform
@@ -643,17 +638,17 @@ class WaveformUncertaintyInterpolation(dict):
         (3) freqencies at which deviations are evaluated
 
         """
-        if eps is not None:   
+        if eps is not None:
             amp, phi, freq = self.draw_samples(Mtot, q, chi1, chi2, nsamples=1,
                                                eps=np.expand_dims(eps, axis=0))
         else:
             amp, phi, freq = self.draw_samples(Mtot, q, chi1, chi2, nsamples=1)
-            
+
         return amp[0], phi[0], freq
-    
+
     def plot_comparison(self, n=1, train=False):
         """Plot generated and true waveform differences at n points."""
-        
+
         # Compare at either test or train points
         if not train:
             selection = np.random.choice(self.test_selection,
@@ -662,38 +657,38 @@ class WaveformUncertaintyInterpolation(dict):
         else:
             selection = np.random.choice(self.train_selection,
                                          min(len(self.train_selection), n),
-                                         replace=False)        
+                                         replace=False)
         wf_uncertainties_selection = [self.wf_uncertainties[i] for i in selection]
-        
+
         for wfu in wf_uncertainties_selection:
             wfu.plot_diffs()
             self.plot_sampled_diffs(wfu.Mtot * self.SOLAR_MASS_KG,
                                     wfu.q, wfu.chi1, wfu.chi2)
             self.plot_aux_comparison(wfu)
-            
+
     def plot_sampled_diffs(self, Mtot, q, chi1, chi2, nsamples=50,
                            save=False, fn='figure'):
         """Draw samples from predicted distribution and plot them."""
-        
+
         # Draw samples
         amp_samples, phi_samples, f_grid = self.draw_samples(Mtot, q,
                                                              chi1, chi2, nsamples)
-        
+
         # Also get the mean prediction (for plotting)
-        mean, chol = self.predict_mean_chol(q, chi1, chi2)        
-        
+        mean, chol = self.predict_mean_chol(q, chi1, chi2)
+
         fig = plt.figure(figsize=(16,6))
         fig.suptitle((r'Predicted waveform differences: $q = {0}$, $\chi_1 = {1}$, $\chi_2 = {2}$; $M_{{\mathrm{{tot}}}} = {3}$').format(q, chi1, chi2, Mtot))
-    
+
         ax1 = plt.subplot(121)
         for i in range(len(phi_samples)):
             plt.plot(f_grid, phi_samples[i], linewidth=0.5)
         plt.scatter(f_grid, mean[self.degree:])
-        plt.xlabel(r'$f$')    
+        plt.xlabel(r'$f$')
         plt.ylabel(r'$\Delta\phi$')
         plt.xscale('log')
         plt.xlim(f_grid[0], f_grid[-1])
-        
+
         ax2 = plt.subplot(122)
         for i in range(len(amp_samples)):
             plt.plot(f_grid, amp_samples[i], linewidth=0.5)
@@ -702,11 +697,11 @@ class WaveformUncertaintyInterpolation(dict):
         plt.ylabel(r'$\Delta A / A_\mathrm{EOB}$')
         plt.xscale('log')
         plt.xlim(f_grid[0], f_grid[-1])
-    
+
         if save:
             plt.savefig(fn)
         plt.show()
-        
+
     def plot_aux_comparison(self, wfu):
         """At a calibration point, compare the predicted and actual mean
         values of the distribution.
@@ -716,31 +711,31 @@ class WaveformUncertaintyInterpolation(dict):
         wfu:  WaveformUncertainty object for which to perform comparison.
 
         """
-        
+
         mean_predicted, chol_predicted = self.predict_mean_chol(wfu.q, wfu.chi1, wfu.chi2)
         mean_actual = wfu.mean_diffs
-        
+
         fig = plt.figure(figsize=(16,6))
         fig.suptitle(('Means comparison (predicted vs actual)'))
-        
+
         ax1 = plt.subplot(121)
         plt.scatter(self.nodes, mean_predicted[self.degree:], label='predicted')
         plt.scatter(self.nodes, mean_actual[self.degree:], label='actual')
         plt.legend()
-        plt.xlabel(r'$f$')    
+        plt.xlabel(r'$f$')
         plt.ylabel(r'$\Delta\phi$')
         plt.xscale('log')
         plt.xlim(self.nodes[0], self.nodes[-1])
-        
+
         ax2 = plt.subplot(122)
         plt.scatter(self.nodes, mean_predicted[:self.degree], label='predicted')
         plt.scatter(self.nodes, mean_actual[:self.degree], label='actual')
         plt.legend()
-        plt.xlabel(r'$f$')    
+        plt.xlabel(r'$f$')
         plt.ylabel(r'$\Delta A$')
         plt.xscale('log')
         plt.xlim(self.nodes[0], self.nodes[-1])
-        
+
         plt.show()
 
 def get_hyperparameters(gp):
@@ -757,7 +752,7 @@ def get_hyperparameters(gp):
     hp[0] = hp[0]**0.5
     hp[-1] = hp[-1]**0.5
     return hp
-        
+
 def generate_gp(points, data, hp0, kernel_type='squaredexponential',
                 fixed=False, hyper_limits=None, n_restarts_optimizer=9):
     """Gaussian Process for ndim dimensional parameter space.
