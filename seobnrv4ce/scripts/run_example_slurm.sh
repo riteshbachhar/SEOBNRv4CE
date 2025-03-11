@@ -11,12 +11,12 @@
 source path-to/seobnrv4ce-venv/bin/activate
 
 # For the SEOBNRv4_ROM model implemented in LALSuite to work
-# LAL_DATA_PATH needs to point to a directory which contains SEOBNRv4ROM_v2.0.hdf5
-# See https://dcc.ligo.org/LIGO-T2500012 for how to obtain this file.
+# LAL_DATA_PATH needs to point to a directory which contains SEOBNRv4ROM_v2.0.hdf5 or SEOBNRv4ROM_v3.0.hdf5,
+# depending on your LALSuite version. Please see the README file.
 export LAL_DATA_PATH=PATH-TO-DATAFILE/
 export OMP_NUM_THREADS=1
 
-python3 PATH-TO_REPO/scripts/bilby_analyze_injection.py \
+bilby_analyze_injection \
   --signal_approximant NRHybSur3dq8_22 \
   --template_approximant SEOBNRv4CE \
   --distance 205.0 \
