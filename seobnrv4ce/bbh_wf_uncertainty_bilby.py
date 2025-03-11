@@ -3,8 +3,13 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 
 from bilby.gw.source import _base_lal_cbc_fd_waveform
 from bilby.core import utils
+from .uncertainty_model import WaveformUncertaintyInterpolation
 
 # Originally implemented in https://git.ligo.org/michael.puerrer/bilby/-/blob/SEOBNRv4_uncertainty/bilby/gw/source.py#L103
+
+# Initialize and load the interpolation (Hardcoded the interpolation)
+wferr = WaveformUncertaintyInterpolation()
+wferr.load_interpolation()
 
 def lal_binary_black_hole_with_waveform_uncertainty(
         frequency_array, mass_1, mass_2, luminosity_distance, a_1, tilt_1,
@@ -55,14 +60,15 @@ def lal_binary_black_hole_with_waveform_uncertainty(
     waveform_kwargs = dict(
         waveform_approximant='SEOBNRv4_ROM', reference_frequency=50.0,
         minimum_frequency=20.0, maximum_frequency=frequency_array[-1],
-        waveform_error_model=None, catch_waveform_errors=False,
-        pn_spin_order=-1, pn_tidal_order=-1,
+        catch_waveform_errors=False, pn_spin_order=-1, pn_tidal_order=-1,
         pn_phase_order=-1, pn_amplitude_order=0)
     waveform_kwargs.update(kwargs)
-    if waveform_kwargs['waveform_error_model'] is None:
-        raise ValueError('waveform_error_model not specified.')
-    else:
-        wferr = waveform_kwargs['waveform_error_model']
+    # if waveform_kwargs['waveform_error_model'] is None:
+    #     raise ValueError('waveform_error_model not specified.')
+    # else:
+    #     wferr = waveform_kwargs['waveform_error_model']
+    #     # Pop waveform_error_model from kwargs so it doesn't get passed to _base_lal_cbc_fd_waveform
+    #     waveform_kwargs.pop('waveform_error_model')
     if waveform_kwargs['waveform_approximant'] != 'SEOBNRv4_ROM':
         raise ValueError('Waveform uncertainty model is only available for SEOBNRv4_ROM.')
 
