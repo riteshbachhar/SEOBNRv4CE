@@ -7,9 +7,19 @@ from .uncertainty_model import WaveformUncertaintyInterpolation
 
 # Originally implemented in https://git.ligo.org/michael.puerrer/bilby/-/blob/SEOBNRv4_uncertainty/bilby/gw/source.py#L103
 
-# Initialize and load the interpolation (Hardcoded the interpolation)
-wferr = WaveformUncertaintyInterpolation()
-wferr.load_interpolation()
+
+_wferr = None
+
+def setup_waveform_uncertainty_model():
+    """
+    Setup function which should be called once before using lal_binary_black_hole_with_waveform_uncertainty()
+    """
+    global _wferr
+    if _wferr is None:
+        print('Instantiating WaveformUncertaintyInterpolation() and loading uncertainty model from disk.')
+        _wferr = WaveformUncertaintyInterpolation()
+        _wferr.load_interpolation()
+
 
 def lal_binary_black_hole_with_waveform_uncertainty(
         frequency_array, mass_1, mass_2, luminosity_distance, a_1, tilt_1,
@@ -63,12 +73,6 @@ def lal_binary_black_hole_with_waveform_uncertainty(
         catch_waveform_errors=False, pn_spin_order=-1, pn_tidal_order=-1,
         pn_phase_order=-1, pn_amplitude_order=0)
     waveform_kwargs.update(kwargs)
-    # if waveform_kwargs['waveform_error_model'] is None:
-    #     raise ValueError('waveform_error_model not specified.')
-    # else:
-    #     wferr = waveform_kwargs['waveform_error_model']
-    #     # Pop waveform_error_model from kwargs so it doesn't get passed to _base_lal_cbc_fd_waveform
-    #     waveform_kwargs.pop('waveform_error_model')
     if waveform_kwargs['waveform_approximant'] != 'SEOBNRv4_ROM':
         raise ValueError('Waveform uncertainty model is only available for SEOBNRv4_ROM.')
 
@@ -88,7 +92,7 @@ def lal_binary_black_hole_with_waveform_uncertainty(
     uncertainty_parameters = np.array([
         A1, A2, A3, A4, A5, A6, A7, A8, A9, A10,
         P1, P2, P3, P4, P5, P6, P7, P8, P9, P10])
-    damp, dphi, f_model = wferr.draw_sample(Mtot_SI, q, spin_1z, spin_2z,
+    damp, dphi, f_model = _wferr.draw_sample(Mtot_SI, q, spin_1z, spin_2z,
         eps=uncertainty_parameters)
     # For the current model degree = 10, and eps has size 2*degree.
 
@@ -105,7 +109,6 @@ def lal_binary_black_hole_with_waveform_uncertainty(
 
     # Apply amplitude and phase error model
     for key, pol in polarizations.items():
-        # print(len(pol), len(wf_fac), len(f[idx]))
         pol[idx] *= wf_fac
 
     return polarizations

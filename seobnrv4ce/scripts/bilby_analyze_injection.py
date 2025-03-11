@@ -29,8 +29,8 @@ import numpy as np
 import bilby
 import lalsimulation as LS
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import seobnrv4ce
+from seobnrv4ce.bbh_wf_uncertainty_bilby import setup_waveform_uncertainty_model, lal_binary_black_hole_with_waveform_uncertainty
+
 
 def setup_waveform_generator_standard(
     waveform_approximant: str,
@@ -126,11 +126,9 @@ def setup_waveform_generator_with_uncertainty(
         "reference_frequency": reference_frequency,
         "minimum_frequency": minimum_frequency,
     }
-    # wferr = seobnrv4ce.WaveformUncertaintyInterpolation()
-    # wferr.load_interpolation()
-    # waveform_arguments["waveform_error_model"] = wferr
 
-    frequency_domain_source_model = seobnrv4ce.lal_binary_black_hole_with_waveform_uncertainty
+    setup_waveform_uncertainty_model()
+    frequency_domain_source_model = lal_binary_black_hole_with_waveform_uncertainty
 
     return setup_waveform_generator_standard(
         waveform_approximant,
