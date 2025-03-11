@@ -32,7 +32,7 @@ data_dir = r'../data/'
 # Uncertainty at a given point in physical parameter space.
 #
 
-class WaveformUncertainty(object):
+class WaveformUncertainty():
     """Represents the waveform uncertainty at one point in physical
     parameter space.
 
@@ -289,7 +289,7 @@ class WaveformUncertainty(object):
             plt.savefig(fn)
         plt.show()
 
-class WaveformUncertaintyInterpolation(dict):
+class WaveformUncertaintyInterpolation():
     """Object that interpolates waveform uncertainty across parameter space."""
 
     SOLAR_MASS_KG = 1.98847e30
@@ -297,7 +297,6 @@ class WaveformUncertaintyInterpolation(dict):
     MF_MAX_CUTOFF = 0.1
 
     def __init__(self, *args, **kwargs):
-        dict.__init__(self, *args, **kwargs)
         self.waveforms_present = False
         self.interpolation_present = False
 
