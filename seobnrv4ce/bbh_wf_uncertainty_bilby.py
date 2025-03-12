@@ -16,7 +16,6 @@ def setup_waveform_uncertainty_model():
     """
     global _wferr
     if _wferr is None:
-        print('Instantiating WaveformUncertaintyInterpolation() and loading uncertainty model from disk.')
         _wferr = WaveformUncertaintyInterpolation()
         _wferr.load_interpolation()
 

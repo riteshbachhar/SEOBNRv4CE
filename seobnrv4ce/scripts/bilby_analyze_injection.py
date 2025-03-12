@@ -141,6 +141,7 @@ def setup_waveform_generator_with_uncertainty(
     )
 
 def setup_ifos_and_injection(
+    waveform_generator_signal: bilby.gw.WaveformGenerator,
     injection_parameters: dict,
     sampling_frequency: float,
     duration: float,
@@ -186,7 +187,7 @@ def setup_ifos_and_injection(
     ifos.inject_signal(waveform_generator=waveform_generator_signal, parameters=injection_parameters)
     return ifos
 
-def setup_standard_prior(mc_min=25.0, mc_max=50.0, q_min=0.125, chi_max=0.8):
+def setup_standard_prior(injection_parameters, mc_min=25.0, mc_max=50.0, q_min=0.125, chi_max=0.8):
     """
     Sets up standard priors for gravitational wave parameter estimation.
 
@@ -358,9 +359,9 @@ def setup_uncertainty_parameters(
         injection_parameters[p] = 0.0
 
 def setup_likelihood_and_sampler(
-    ifos, waveform_generator_template, priors, label,
+    ifos, waveform_generator_template, injection_parameters, priors, label,
     sampler='dynesty', distance_marginalization=True, phase_marginalization=True, time_marginalization=True,
-    sample="acceptance-walk", naccept=100, npoints=1024, maxmcmc=5000, npool=64
+    sample="acceptance-walk", naccept=100, npoints=1024, maxmcmc=5000, npool=64, outdir=None
 ):
     """
     Sets up the likelihood function and runs the sampler for parameter estimation.
@@ -418,6 +419,10 @@ def setup_likelihood_and_sampler(
             conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
             result_class=bilby.gw.result.CBCResult
         )
+    
+    if outdir is None:
+        outdir = 'outdir_'
+
     elif sampler == 'mcmc':
         # See https://lscsoft.docs.ligo.org/bilby/bilby-mcmc-guide.html
         sampler = "bilby_mcmc"
@@ -442,7 +447,7 @@ def setup_likelihood_and_sampler(
         raise ValueError(f'Sampler {sampler} not supported')
     return result
 
-def make_reduced_corner_plots(result):
+def make_reduced_corner_plots(savepath, result):
     """
     Generates reduced corner plots for intrinsic parameters of the gravitational wave source.
 
@@ -460,12 +465,12 @@ def make_reduced_corner_plots(result):
         pars_to_plot[p] = result.injection_parameters[p]
     pars_to_plot['chi_1'] = result.injection_parameters['spin_1z'][()]
     pars_to_plot['chi_2'] = result.injection_parameters['spin_2z'][()]
-    result.plot_corner(parameters=pars_to_plot, filename=f"{outdir}/corner_intrinsic1.png")
+    result.plot_corner(parameters=pars_to_plot, filename=f"{savepath}/corner_intrinsic1.png")
 
     pars_to_plot_eff = {}
     for p in ['chirp_mass', 'mass_ratio', 'chi_eff', 'theta_jn', 'luminosity_distance']:
         pars_to_plot_eff[p] = result.injection_parameters[p]
-    result.plot_corner(parameters=pars_to_plot_eff, filename=f"{outdir}/corner_intrinsic2.png")
+    result.plot_corner(parameters=pars_to_plot_eff, filename=f"{savepath}/corner_intrinsic2.png")
 
 def parse_args():
     """
@@ -564,7 +569,7 @@ def main():
         fundamental_mode=args.fundamental_mode_template)
 
     ifos = setup_ifos_and_injection(
-        injection_parameters, sampling_frequency, duration, minimum_frequency, use_zero_noise=args.zero_noise)
+        waveform_generator_signal, injection_parameters, sampling_frequency, duration, minimum_frequency, use_zero_noise=args.zero_noise)
     if injection_parameters['mass_ratio'] < 0.3 and args.signal_approximant!="NRHybSur3dq8":
         q_min = 1.0/16.0
     elif injection_parameters['mass_ratio'] < 0.3 and args.signal_approximant=="NRHybSur3dq8":
@@ -574,7 +579,7 @@ def main():
         q_min = 1.0/4.0
 
     # Prior setup
-    priors = setup_standard_prior(mc_min=25.0, mc_max=50.0, q_min=q_min, chi_max=0.8)
+    priors = setup_standard_prior(injection_parameters, mc_min=25.0, mc_max=50.0, q_min=q_min, chi_max=0.8)
     if args.template_approximant == 'SEOBNRv4CE':
         setup_uncertainty_model_priors(priors, uncertainty_parameters, args.sigma)
     elif args.template_approximant == 'SEOBNRv4CE0':
@@ -592,11 +597,11 @@ def main():
     if args.pin_spin_parameters:
         pin_spin_parameters(priors, injection_parameters)
 
-    result = setup_likelihood_and_sampler(ifos, waveform_generator_template, priors, label,
-        sampler='dynesty', distance_marginalization=args.distance_marginalization,
+    result = setup_likelihood_and_sampler(ifos, waveform_generator_template, injection_parameters, priors, 
+        label, sampler='dynesty', distance_marginalization=args.distance_marginalization,
         phase_marginalization=args.phase_marginalization, time_marginalization=args.time_marginalization,
-        sample = "acceptance-walk", naccept=args.naccept, npoints=args.npoints, maxmcmc=args.maxmcmc, npool=args.npool)
-    make_reduced_corner_plots(result)
+        sample = "acceptance-walk", naccept=args.naccept, npoints=args.npoints, maxmcmc=args.maxmcmc, npool=args.npool, outdir=outdir)
+    make_reduced_corner_plots(outdir, result)
 
 if __name__ == '__main__':
     main()

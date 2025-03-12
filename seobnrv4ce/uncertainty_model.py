@@ -462,7 +462,7 @@ class WaveformUncertaintyInterpolation():
             fname = "uncertainty_interpolation_Mtot-50_fmin-20.0.hdf5"
             fn = os.path.join(os.path.dirname(__file__), f"data/{fname}")
 
-        print(f"Attempting to load datafile from {fn}")
+        print(f"Loading datafile from {fn}")
         f = h5py.File(fn, 'r')
 
         self.Mtot = f.attrs['Mtot']
