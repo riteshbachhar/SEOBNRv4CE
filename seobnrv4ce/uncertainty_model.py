@@ -1,17 +1,18 @@
-# The main components of this module are two classes:
-#
-# 1. WaveformUncertainty. Represents the uncertainty associated to a
-# SEOBNRv4 waveform at a given calibration point, ie. the uncertainty
-# at a single point in physical parameter space.
-#
-# 2. WaveformUncertaintyInterpolation. Represents the uncertainty
-# associated to the entire SEOBNRv4 model, ie. the uncertainty
-# interpolated throughout physical parameter space.
-#
-#
-# This module does not require Roberto's modified lalsuite, however it
-# does require a database of waveforms *or* a previously saved
-# uncertainty model.
+"""
+The main components of this module are two classes:
+
+1. WaveformUncertainty. Represents the uncertainty associated to a
+SEOBNRv4 waveform at a given calibration point, ie. the uncertainty
+at a single point in physical parameter space.
+
+2. WaveformUncertaintyInterpolation. Represents the uncertainty
+associated to the entire SEOBNRv4 model, ie. the uncertainty
+interpolated throughout physical parameter space.
+
+This module does not require Roberto's modified lalsuite, however it
+does require a database of waveforms *or* a previously saved
+uncertainty model.
+"""
 
 import os
 import h5py
@@ -97,17 +98,12 @@ class WaveformUncertainty():
         phi_eob:  phase of EOB waveform
 
         """
-        # a_eob, b_eob = self.linear_fit(phi_eob)
         amp_diff_list = []
         phi_diff_list = []
         for i in range(self.nsamples):
             phi_draw = phi_draw_array[i]
             amp_draw = amp_draw_array[i]
-            # a_draw, b_draw = self.linear_fit(phi_draw)
-            #phi_diff = (phi_draw - a_draw*self.f_grid - b_draw
-            #            - (phi_eob - a_eob*self.f_grid - b_eob))
             phi_diff = phi_draw - phi_eob
-            #amp_diff = amp_draw - amp_eob
             amp_diff = np.where(np.all((amp_eob > 0.0, amp_draw > 0.0), axis=0),
                                 amp_draw / amp_eob - 1.0,
                                 0.0)
