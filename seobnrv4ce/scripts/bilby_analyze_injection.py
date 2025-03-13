@@ -419,10 +419,6 @@ def setup_likelihood_and_sampler(
             conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
             result_class=bilby.gw.result.CBCResult
         )
-    
-    if outdir is None:
-        outdir = 'outdir_'
-
     elif sampler == 'mcmc':
         # See https://lscsoft.docs.ligo.org/bilby/bilby-mcmc-guide.html
         sampler = "bilby_mcmc"
